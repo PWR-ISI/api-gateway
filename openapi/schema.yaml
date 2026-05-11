@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: Medical System — API Gateway
+  description: |
+    Single entry point for the distributed medical platform.
+    All requests require a valid AWS Cognito JWT (RS256) in the Authorization header.
+    The gateway validates the token and forwards the request to the appropriate downstream service,
+    injecting X-User-Id and X-User-Role headers.
+  version: 1.0.0
+  contact:
+    email: team@medical-system.local
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+  - url: https://api.medical-system.example.com
+    description: Production (ALB → ECS)
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Cognito RS256 JWT. Obtain via Cognito Hosted UI or SRP auth flow.
+
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+
+    ErrorResponse:
+      type: object
+      required: [error, detail]
+      properties:
+        error:
+          type: string
+          example: SERVICE_UNAVAILABLE
+        detail:
+          type: string
+          example: The upstream service is unavailable.
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Present only for validation errors (HTTP 400).
+
+paths:
+  /health/:
+    get:
+      operationId: health_check
+      summary: Liveness probe
+      description: Returns 200 OK. No authentication required. Used by ALB / ECS health checks.
+      security: []
+      tags: [Infrastructure]
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/schema/:
+    get:
+      operationId: gateway_openapi_schema
+      summary: Gateway OpenAPI schema (YAML/JSON)
+      security: []
+      tags: [Infrastructure]
+      responses:
+        '200':
+          description: OpenAPI 3.0 schema document
+
+  /api/docs/:
+    get:
+      operationId: swagger_ui
+      summary: Swagger UI
+      security: []
+      tags: [Infrastructure]
+      responses:
+        '200':
+          description: Interactive API documentation
+
+  /api/schema/aggregate/:
+    get:
+      operationId: aggregated_schema
+      summary: Aggregated OpenAPI schema from all downstream services
+      security: []
+      tags: [Infrastructure]
+      responses:
+        '200':
+          description: Merged OpenAPI 3.0 document
+
+  /api/v1/{service_prefix}/{path}:
+    parameters:
+      - name: service_prefix
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+            - appointments
+            - payments
+            - notifications
+            - schedule
+            - facility-staff
+            - medical-records
+            - audit-logs
+        description: Downstream service identifier
+      - name: path
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path forwarded verbatim to the downstream service
+    get:
+      operationId: proxy_get
+      summary: Proxy GET to downstream service
+      tags: [Proxy]
+      responses:
+        '200':
+          description: Response from downstream service
+        '401':
+          description: Missing or invalid JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Unknown service prefix
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: Downstream service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '504':
+          description: Downstream service timed out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      operationId: proxy_post
+      summary: Proxy POST to downstream service
+      tags: [Proxy]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Resource created by downstream service
+        '400':
+          description: Validation error from downstream service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      operationId: proxy_put
+      summary: Proxy PUT to downstream service
+      tags: [Proxy]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated by downstream service
+    patch:
+      operationId: proxy_patch
+      summary: Proxy PATCH to downstream service
+      tags: [Proxy]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Patched by downstream service
+    delete:
+      operationId: proxy_delete
+      summary: Proxy DELETE to downstream service
+      tags: [Proxy]
+      responses:
+        '204':
+          description: Deleted by downstream service

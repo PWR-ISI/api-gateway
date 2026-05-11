@@ -1,11 +1,38 @@
 services:
-  app:
+
+  api-gateway:
     build: .
     container_name: api-gateway
-    command: gunicorn api_gateway.wsgi:application --bind 0.0.0.0:8000
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.local
     volumes:
       - .:/app
     env_file:
       - .env
     ports:
       - "8000:8000"
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  localstack:
+    image: localstack/localstack:3
+    container_name: localstack-gateway
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=cognito-idp,s3,secretsmanager
+      - AWS_DEFAULT_REGION=eu-central-1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:-}
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  localstack_data:

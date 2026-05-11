@@ -8,6 +8,7 @@ __pycache__/
 env/
 venv/
 .venv/
+.api-venv/
 
 # Distribution
 build/
@@ -18,16 +19,32 @@ dist/
 *.log
 db.sqlite3
 media/
-local_settings.py
+staticfiles/
 
 # Testing
 .pytest_cache/
+.coverage
 coverage.xml
 htmlcov/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+*.pid
+
+# Translations
+*.mo
+*.pot
 
 # Editor
 .vscode/
 .idea/
 
+# OS
+.DS_Store
+Thumbs.db
+
 # Env
 .env
+
+.claude/
